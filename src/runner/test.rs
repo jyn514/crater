@@ -6,11 +6,12 @@ use crate::runner::tasks::TaskCtx;
 use crate::runner::OverrideResult;
 use cargo_metadata::diagnostic::DiagnosticLevel;
 use cargo_metadata::{Message, Metadata, PackageId};
+use docsrs_metadata::Metadata as DocsrsMetadata;
 use failure::Error;
 use remove_dir_all::remove_dir_all;
 use rustwide::cmd::{CommandError, ProcessLinesActions, SandboxBuilder};
 use rustwide::{Build, PrepareError};
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
 
 fn failure_reason(err: &Error) -> FailureReason {
@@ -80,6 +81,7 @@ fn run_cargo<DB: WriteResults>(
     args: &[&str],
     check_errors: bool,
     local_packages_id: &HashSet<PackageId>,
+    env: HashMap<&'static str, String>,
 ) -> Fallible<()> {
     let mut rustflags = format!("--cap-lints={}", ctx.experiment.cap_lints.to_str());
     if let Some(ref tc_rustflags) = ctx.toolchain.rustflags {
@@ -148,6 +150,9 @@ fn run_cargo<DB: WriteResults>(
         .env("CARGO_INCREMENTAL", "0")
         .env("RUST_BACKTRACE", "full")
         .env(rustflags_env, rustflags);
+    for (var, data) in env {
+        command = command.env(var, data);
+    }
 
     if check_errors {
         command = command.process_lines(&mut detect_error);
@@ -238,6 +243,7 @@ fn build<DB: WriteResults>(
         &["build", "--frozen", "--message-format=json"],
         true,
         local_packages_id,
+        HashMap::default(),
     )?;
     run_cargo(
         ctx,
@@ -245,6 +251,7 @@ fn build<DB: WriteResults>(
         &["test", "--frozen", "--no-run", "--message-format=json"],
         true,
         local_packages_id,
+        HashMap::default(),
     )?;
     Ok(())
 }
@@ -256,6 +263,7 @@ fn test<DB: WriteResults>(ctx: &TaskCtx<DB>, build_env: &Build) -> Fallible<()> 
         &["test", "--frozen"],
         false,
         &HashSet::new(),
+        HashMap::default(),
     )
 }
 
@@ -308,6 +316,7 @@ pub(super) fn test_check_only<DB: WriteResults>(
         ],
         true,
         local_packages_id,
+        HashMap::default(),
     ) {
         Ok(TestResult::BuildFail(failure_reason(&err)))
     } else {
@@ -332,6 +341,7 @@ pub(super) fn test_clippy_only<DB: WriteResults>(
         ],
         true,
         local_packages_id,
+        HashMap::default(),
     ) {
         Ok(TestResult::BuildFail(failure_reason(&err)))
     } else {
@@ -344,18 +354,26 @@ pub(super) fn test_rustdoc<DB: WriteResults>(
     build_env: &Build,
     local_packages_id: &HashSet<PackageId>,
 ) -> Fallible<TestResult> {
+    let src = build_env.host_source_dir();
+    let metadata = DocsrsMetadata::from_crate_root(src)?;
+    let cargo_args = metadata.cargo_args(
+        &[
+            "--frozen".into(),
+            "--document-private-items".into(),
+            "--message-format=json".into(),
+        ],
+        &[],
+    );
+    assert_eq!(cargo_args[0], "rustdoc");
+    let cargo_args: Vec<_> = cargo_args.iter().map(|s| s.as_str()).collect();
+
     let res = run_cargo(
         ctx,
         build_env,
-        &[
-            "doc",
-            "--frozen",
-            "--no-deps",
-            "--document-private-items",
-            "--message-format=json",
-        ],
+        &cargo_args,
         true,
         local_packages_id,
+        metadata.environment_variables(),
     );
 
     // Make sure to remove the built documentation

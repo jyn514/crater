@@ -352,6 +352,7 @@ dependencies = [
  "csv",
  "ctrlc",
  "difference",
+ "docsrs-metadata",
  "dotenv",
  "env_logger",
  "error-chain 0.12.0",
@@ -560,6 +561,16 @@ dependencies = [
  "libc",
  "redox_users",
  "winapi 0.3.8",
+]
+
+[[package]]
+name = "docsrs-metadata"
+version = "0.1.0"
+source = "git+https://github.com/rust-lang/docs.rs/#be481c95b3f0ff9976100a98ffdb2f1297808232"
+dependencies = [
+ "serde",
+ "thiserror",
+ "toml 0.5.5",
 ]
 
 [[package]]
@@ -2150,7 +2161,7 @@ dependencies = [
 [[package]]
 name = "rust_team_data"
 version = "1.0.0"
-source = "git+https://github.com/rust-lang/team#a3c474be7b2bf969ee305b5e0ed32abf11102410"
+source = "git+https://github.com/rust-lang/team#8582a9e6176a21725e69070bbccef23d2bf854de"
 dependencies = [
  "indexmap",
  "serde",
